@@ -121,6 +121,10 @@ export default class Send extends React.Component<Props, State> {
         : new n3Wallet.Account(this.props.wif)
       this.updateRowField(0, 'address', account.address)
     }
+
+    if (this.props.chain === 'neo3' && !this.props.isMigration) {
+      this.attemptToCalculateN3Fees(this.state.sendRowDetails)
+    }
   }
 
   pushQRCodeData = (data: Object) => {
@@ -235,11 +239,19 @@ export default class Send extends React.Component<Props, State> {
 
   attemptToCalculateN3Fees = async (sendRowDetails: Array<Object>) => {
     this.setState({ loading: true })
-    const sendEntries = sendRowDetails.map((row: Object) => ({
-      address: row.address,
-      amount: toNumber(row.amount.toString()),
-      symbol: row.asset,
-    }))
+    const sendEntries = sendRowDetails.length
+      ? sendRowDetails.map((row: Object) => ({
+          address: row.address,
+          amount: toNumber(row.amount.toString()),
+          symbol: row.asset,
+        }))
+      : [
+          {
+            address: new n3Wallet.Account().address,
+            amount: toNumber('1'),
+            symbol: 'GAS',
+          },
+        ]
 
     let shouldCalculateFees = true
 
@@ -251,12 +263,16 @@ export default class Send extends React.Component<Props, State> {
       }
     })
 
+    console.log(shouldCalculateFees)
+
     if (shouldCalculateFees) {
       const fees = await this.props
         .calculateN3Fees({ sendEntries })
         .catch(() => {
           console.warn('An error occurred attempting to calculate fees')
         })
+
+      console.log({ fees })
       // eslint-disable-next-line
       this.setState({
         n3Fees: fees,
@@ -268,7 +284,8 @@ export default class Send extends React.Component<Props, State> {
   calculateMaxValue = (asset: string, index: number = 0) => {
     const { sendableAssets, chain } = this.props
 
-    const MIN_EXPECTED_GAS_FEE = 0.072
+    const MIN_EXPECTED_GAS_FEE =
+      Number(this.state.n3Fees.systemFee) + Number(this.state.n3Fees.networkFee)
 
     if (chain === 'neo2') {
       if (sendableAssets[asset]) {
